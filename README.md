@@ -1,0 +1,245 @@
+# n8n Audio Transcription Helper API
+
+Small production-ready Fastify API for self-hosted n8n audio transcription.
+
+The API accepts one to five multipart audio uploads, normalizes each file with ffmpeg, splits large audio into safe chunks, transcribes chunks with OpenAI, merges transcript text in upload order, and deletes temporary files after each request.
+
+## Requirements
+
+- Node.js 20 or newer recommended
+- ffmpeg installed and available in `PATH`
+- OpenAI API key
+- PM2 for production on Ubuntu
+
+No database, queue, Redis, Docker, frontend, or Google Drive integration is required.
+
+## Installation
+
+```bash
+npm install
+cp .env.example .env
+```
+
+Edit `.env` and set:
+
+```env
+OPENAI_API_KEY=your-openai-api-key
+API_KEY=your-internal-api-key
+```
+
+## Environment
+
+Important defaults:
+
+```env
+PORT=3000
+HOST=0.0.0.0
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe
+DEFAULT_LANGUAGE=id
+TEMP_DIR=./temp
+MAX_UPLOAD_MB=500
+MAX_CHUNK_MB=24
+CHUNK_SECONDS=600
+REQUEST_TIMEOUT_MS=1800000
+```
+
+`REQUEST_TIMEOUT_MS=1800000` is 30 minutes. Increase n8n HTTP Request timeout and reverse proxy timeout if large files need more time.
+
+## ffmpeg on Windows
+
+Install ffmpeg and make sure `ffmpeg.exe` is available in `PATH`.
+
+Verify:
+
+```bash
+ffmpeg -version
+```
+
+If the command is not found, add the ffmpeg `bin` directory to the Windows `PATH`, then reopen the terminal.
+
+## ffmpeg on Ubuntu
+
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+ffmpeg -version
+```
+
+## Run Locally
+
+```bash
+npm run dev
+```
+
+Health check:
+
+```bash
+curl http://localhost:3000/health
+```
+
+Expected:
+
+```json
+{
+  "success": true,
+  "status": "ok"
+}
+```
+
+## Test with curl
+
+### One file
+
+```bash
+curl -X POST http://localhost:3000/transcribe-audio \
+  -H "x-api-key: change-this-internal-secret" \
+  -F "language=id" \
+  -F "file=@sample.mp3"
+```
+
+### Multiple files
+
+Use the same `file` field multiple times. The API accepts up to 5 files per request and processes them in upload order.
+
+```bash
+curl -X POST http://localhost:3000/transcribe-audio \
+  -H "x-api-key: change-this-internal-secret" \
+  -F "language=id" \
+  -F "file=@part-01.mp3" \
+  -F "file=@part-02.mp3" \
+  -F "file=@part-03.mp3" \
+  -F "file=@part-04.mp3" \
+  -F "file=@part-05.mp3"
+```
+
+PowerShell example:
+
+```powershell
+curl.exe -X POST "http://localhost:3000/transcribe-audio" `
+  -H "x-api-key: change-this-internal-secret" `
+  -F "language=id" `
+  -F "file=@C:\path\to\part-01.mp3" `
+  -F "file=@C:\path\to\part-02.mp3" `
+  -F "file=@C:\path\to\part-03.mp3" `
+  -F "file=@C:\path\to\part-04.mp3" `
+  -F "file=@C:\path\to\part-05.mp3"
+```
+
+Success response:
+
+```json
+{
+  "success": true,
+  "file_count": 3,
+  "chunk_count": 8,
+  "transcript": "Transcript text..."
+}
+```
+
+If any file fails, the request returns an error and does not return a partial transcript.
+
+## n8n HTTP Request Setup
+
+HTTP Request node:
+
+```txt
+Method: POST
+URL: http://your-vps-ip:3000/transcribe-audio
+Authentication: None
+Headers:
+  x-api-key: your-api-key
+Body Content Type: Form-Data
+Form field:
+  file = binary file, repeat up to 5 times for multiple files
+  language = id
+Response Format: JSON
+Timeout: increase if audio files are large
+```
+
+The `file` form field must contain the binary audio file. For multiple files, repeat the `file` field. Files are transcribed and merged in upload order.
+
+## Run with PM2
+
+```bash
+npm install --omit=dev
+pm2 start src/server.js --name audio-transcriber-api
+pm2 save
+pm2 startup
+```
+
+View logs:
+
+```bash
+pm2 logs audio-transcriber-api
+```
+
+Restart after changes:
+
+```bash
+pm2 restart audio-transcriber-api
+```
+
+## Production Notes
+
+- Keep the API behind a reverse proxy and firewall rules.
+- Require `x-api-key` for every transcription request.
+- Use HTTPS at the reverse proxy layer.
+- Do not expose `.env`.
+- Do not log OpenAI keys, internal API keys, file contents, or full transcripts.
+- Keep `MAX_CHUNK_MB` below the OpenAI upload limit. The default is `24`.
+- Make sure reverse proxy, n8n, and Node timeouts are high enough for large audio.
+- Temporary request folders are deleted after success and errors.
+
+## Manual Test Plan
+
+Prepare:
+
+```txt
+small.mp3       under 25MB
+large.mp3       around 50-80MB
+invalid.txt     non-audio file
+```
+
+Test:
+
+- `GET /health` returns `{ "success": true, "status": "ok" }`.
+- Small single-file audio returns `success: true`, `file_count: 1`, and `chunk_count: 1`.
+- Multiple audio files return one merged transcript in upload order.
+- More than 5 uploaded files returns HTTP `400`.
+- Large audio is normalized, split into chunks below `MAX_CHUNK_MB`, and returns merged transcript.
+- Missing `x-api-key` returns HTTP `401`.
+- Wrong `x-api-key` returns HTTP `401`.
+- Missing `file` returns HTTP `400`.
+- Invalid audio returns HTTP `422`.
+- After each request, the temp request folder is deleted.
+
+## Troubleshooting
+
+### `ffmpeg is not installed or is not available in PATH`
+
+Install ffmpeg and verify:
+
+```bash
+ffmpeg -version
+```
+
+### `Uploaded file exceeds configured max upload size`
+
+Increase `MAX_UPLOAD_MB` in `.env` if the file size is expected.
+
+### OpenAI rate limit
+
+Wait and retry, or reduce concurrent n8n calls to this API.
+
+### Request timeout
+
+Increase:
+
+- `REQUEST_TIMEOUT_MS`
+- n8n HTTP Request timeout
+- reverse proxy timeout
+- PM2 or VPS process timeout settings if applicable
+
+### Invalid or corrupt audio
+
+The API relies on ffmpeg to validate and convert audio. If ffmpeg cannot process the file, the API returns HTTP `422`.
