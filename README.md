@@ -131,8 +131,31 @@ Success response:
 {
   "success": true,
   "file_count": 3,
-  "chunk_count": 8,
-  "transcript": "Transcript text..."
+  "total_chunk_count": 8,
+  "merged_transcript": "Transcript file 1...\n\nTranscript file 2...\n\nTranscript file 3...",
+  "files": [
+    {
+      "file_index": 1,
+      "file_name": "part-01.mp3",
+      "success": true,
+      "chunk_count": 3,
+      "transcript": "Transcript file 1..."
+    },
+    {
+      "file_index": 2,
+      "file_name": "part-02.mp3",
+      "success": true,
+      "chunk_count": 3,
+      "transcript": "Transcript file 2..."
+    },
+    {
+      "file_index": 3,
+      "file_name": "part-03.mp3",
+      "success": true,
+      "chunk_count": 2,
+      "transcript": "Transcript file 3..."
+    }
+  ]
 }
 ```
 
@@ -203,8 +226,8 @@ invalid.txt     non-audio file
 Test:
 
 - `GET /health` returns `{ "success": true, "status": "ok" }`.
-- Small single-file audio returns `success: true`, `file_count: 1`, and `chunk_count: 1`.
-- Multiple audio files return one merged transcript in upload order.
+- Small single-file audio returns `success: true`, `file_count: 1`, and `total_chunk_count: 1`.
+- Multiple audio files return `merged_transcript` and a `files` array in upload order.
 - More than 5 uploaded files returns HTTP `400`.
 - Large audio is normalized, split into chunks below `MAX_CHUNK_MB`, and returns merged transcript.
 - Missing `x-api-key` returns HTTP `401`.

@@ -132,6 +132,10 @@ async function processUploadedFile(uploadedFile, language, requestDir, requestId
   }
 
   return {
+    file_index: fileIndex + 1,
+    file_name: uploadedFile.originalFileName,
+    success: true,
+    chunk_count: chunkPaths.length,
     transcript: transcription.transcript,
     chunkCount: chunkPaths.length
   };
@@ -186,11 +190,18 @@ async function transcribeAudioRoute(request, reply) {
     const body = {
       success: true,
       file_count: upload.files.length,
-      chunk_count: totalChunkCount,
-      transcript: fileResults
+      total_chunk_count: totalChunkCount,
+      merged_transcript: fileResults
         .map((fileResult) => fileResult.transcript.trim())
         .filter(Boolean)
-        .join('\n\n')
+        .join('\n\n'),
+      files: fileResults.map((fileResult) => ({
+        file_index: fileResult.file_index,
+        file_name: fileResult.file_name,
+        success: fileResult.success,
+        chunk_count: fileResult.chunk_count,
+        transcript: fileResult.transcript
+      }))
     };
 
     return reply.code(200).send(body);
