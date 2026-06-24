@@ -119,6 +119,7 @@ async function transcribeDriveFilesRoute(request, reply) {
     const tempContext = await createRequestTempFolder(config.tempDir);
     requestDir = tempContext.requestDir;
     requestId = tempContext.requestId;
+    request.transcribeRequestId = requestId;
 
     logger.info('Drive transcription request started', {
       request_id: requestId,

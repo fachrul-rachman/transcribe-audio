@@ -154,6 +154,7 @@ async function transcribeAudioRoute(request, reply) {
     const tempContext = await createRequestTempFolder(config.tempDir);
     requestDir = tempContext.requestDir;
     requestId = tempContext.requestId;
+    request.transcribeRequestId = requestId;
 
     logger.info('Transcription request started', { request_id: requestId });
 

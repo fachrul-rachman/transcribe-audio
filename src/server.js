@@ -20,6 +20,32 @@ async function buildServer() {
     }
   });
 
+  fastify.addHook('onRequest', async (request, reply) => {
+    request.httpStartedAt = Date.now();
+
+    reply.raw.on('close', () => {
+      if (!reply.raw.writableEnded) {
+        logger.warn('HTTP response closed before completion', {
+          request_id: request.transcribeRequestId || null,
+          method: request.method,
+          url: request.url,
+          status_code: reply.statusCode,
+          duration_ms: Date.now() - request.httpStartedAt
+        });
+      }
+    });
+  });
+
+  fastify.addHook('onResponse', async (request, reply) => {
+    logger.info('HTTP response sent', {
+      request_id: request.transcribeRequestId || null,
+      method: request.method,
+      url: request.url,
+      status_code: reply.statusCode,
+      duration_ms: Date.now() - request.httpStartedAt
+    });
+  });
+
   fastify.get('/health', async () => ({
     success: true,
     status: 'ok'
