@@ -144,11 +144,13 @@ async function validateChunkSizes(chunkPaths) {
 }
 
 function getRetryDurations() {
-  const durations = [config.chunkSeconds, ...RETRY_DURATIONS_SECONDS]
+  const configuredDuration = Number(config.chunkSeconds);
+  const fallbackDurations = RETRY_DURATIONS_SECONDS.filter((duration) => duration < configuredDuration);
+  const durations = [configuredDuration, ...fallbackDurations]
     .map((duration) => Number(duration))
     .filter((duration) => Number.isFinite(duration) && duration > 0);
 
-  return [...new Set(durations)].sort((a, b) => b - a);
+  return [...new Set(durations)];
 }
 
 async function prepareAudioChunks(inputPath, requestDir) {

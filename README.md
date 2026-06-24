@@ -213,7 +213,7 @@ pm2 restart audio-transcriber-api
 - Do not expose `.env`.
 - Do not log OpenAI keys, internal API keys, file contents, or full transcripts.
 - Keep `MAX_CHUNK_MB` below the OpenAI upload limit. The default is `24`.
-- If production sees repeated OpenAI connection closes, reduce `CHUNK_SECONDS` to `300` so each OpenAI request is shorter.
+- If production sees repeated OpenAI connection closes, reduce `CHUNK_SECONDS` to `180` so each OpenAI request is shorter.
 - Keep `OPENAI_CHUNK_RETRIES` enabled for transient network failures. The default is `3`.
 - Make sure reverse proxy, n8n, and Node timeouts are high enough for large audio.
 - Temporary request folders are deleted after success and errors.
@@ -266,9 +266,9 @@ If logs show `ERR_STREAM_PREMATURE_CLOSE` or `Premature close`, the connection t
 Recommended production settings:
 
 ```env
-OPENAI_CHUNK_RETRIES=3
-OPENAI_RETRY_BASE_MS=1000
-CHUNK_SECONDS=300
+OPENAI_CHUNK_RETRIES=5
+OPENAI_RETRY_BASE_MS=2000
+CHUNK_SECONDS=180
 ```
 
 After changing `.env`, restart PM2:
