@@ -41,9 +41,12 @@ MAX_UPLOAD_MB=500
 MAX_CHUNK_MB=24
 CHUNK_SECONDS=600
 REQUEST_TIMEOUT_MS=1800000
+OPENAI_CHUNK_RETRIES=3
+OPENAI_RETRY_BASE_MS=1000
 ```
 
 `REQUEST_TIMEOUT_MS=1800000` is 30 minutes. Increase n8n HTTP Request timeout and reverse proxy timeout if large files need more time.
+`OPENAI_CHUNK_RETRIES` retries transient OpenAI/network failures per chunk, such as premature connection close, timeout, rate limit, or upstream 5xx errors.
 
 ## ffmpeg on Windows
 
@@ -210,6 +213,8 @@ pm2 restart audio-transcriber-api
 - Do not expose `.env`.
 - Do not log OpenAI keys, internal API keys, file contents, or full transcripts.
 - Keep `MAX_CHUNK_MB` below the OpenAI upload limit. The default is `24`.
+- If production sees repeated OpenAI connection closes, reduce `CHUNK_SECONDS` to `300` so each OpenAI request is shorter.
+- Keep `OPENAI_CHUNK_RETRIES` enabled for transient network failures. The default is `3`.
 - Make sure reverse proxy, n8n, and Node timeouts are high enough for large audio.
 - Temporary request folders are deleted after success and errors.
 
@@ -253,6 +258,24 @@ Increase `MAX_UPLOAD_MB` in `.env` if the file size is expected.
 ### OpenAI rate limit
 
 Wait and retry, or reduce concurrent n8n calls to this API.
+
+### OpenAI connection closed early
+
+If logs show `ERR_STREAM_PREMATURE_CLOSE` or `Premature close`, the connection to OpenAI was interrupted while reading the response. The API retries transient failures per chunk by default.
+
+Recommended production settings:
+
+```env
+OPENAI_CHUNK_RETRIES=3
+OPENAI_RETRY_BASE_MS=1000
+CHUNK_SECONDS=300
+```
+
+After changing `.env`, restart PM2:
+
+```bash
+pm2 restart audio-transcriber-api
+```
 
 ### Request timeout
 

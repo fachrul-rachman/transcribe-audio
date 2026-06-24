@@ -10,6 +10,12 @@ const client = new OpenAI({
   timeout: config.requestTimeoutMs
 });
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function getOpenAiStatusCode(error) {
   if (error && error.status === 429) {
     return 429;
@@ -22,9 +28,38 @@ function getOpenAiStatusCode(error) {
   return 502;
 }
 
+function isTransientOpenAiError(error) {
+  if (!error) {
+    return false;
+  }
+
+  const message = error.message ? String(error.message) : '';
+
+  if (error.status === 408 || error.status === 409 || error.status === 429 || error.status >= 500) {
+    return true;
+  }
+
+  if (/Premature close|socket hang up|fetch failed/i.test(message)) {
+    return true;
+  }
+
+  return [
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'EPIPE',
+    'ETIMEDOUT',
+    'ERR_STREAM_PREMATURE_CLOSE',
+    'UND_ERR_SOCKET'
+  ].includes(error.code);
+}
+
 function getSafeOpenAiMessage(error) {
   if (error && error.status === 429) {
     return 'OpenAI rate limit reached';
+  }
+
+  if (error && error.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+    return 'OpenAI connection closed early';
   }
 
   if (error && error.code === 'ETIMEDOUT') {
@@ -34,7 +69,7 @@ function getSafeOpenAiMessage(error) {
   return 'OpenAI transcription failed';
 }
 
-async function transcribeChunk(chunkPath, language) {
+async function transcribeChunkOnce(chunkPath, language) {
   const response = await client.audio.transcriptions.create({
     file: fs.createReadStream(chunkPath),
     model: config.openaiTranscribeModel,
@@ -44,6 +79,38 @@ async function transcribeChunk(chunkPath, language) {
   return response.text || '';
 }
 
+async function transcribeChunk(chunkPath, language, chunkIndex) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= config.openaiChunkRetries + 1; attempt += 1) {
+    try {
+      return await transcribeChunkOnce(chunkPath, language);
+    } catch (error) {
+      lastError = error;
+
+      if (!isTransientOpenAiError(error) || attempt > config.openaiChunkRetries) {
+        throw error;
+      }
+
+      const delayMs = config.openaiRetryBaseMs * 2 ** (attempt - 1);
+
+      logger.warn('Retrying chunk transcription after transient OpenAI error', {
+        chunk_index: chunkIndex,
+        attempt,
+        next_attempt: attempt + 1,
+        delay_ms: delayMs,
+        status: error && error.status,
+        code: error && error.code,
+        message: error && error.message ? String(error.message).slice(0, 200) : undefined
+      });
+
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError;
+}
+
 async function transcribeChunks(chunkPaths, language) {
   const transcripts = [];
   const failedChunks = [];
@@ -51,7 +118,7 @@ async function transcribeChunks(chunkPaths, language) {
 
   for (let index = 0; index < chunkPaths.length; index += 1) {
     try {
-      const text = await transcribeChunk(chunkPaths[index], language);
+      const text = await transcribeChunk(chunkPaths[index], language, index + 1);
       transcripts.push({
         index,
         text

@@ -14,6 +14,17 @@ function readNumber(name, fallback) {
   return value;
 }
 
+function readNonNegativeNumber(name, fallback) {
+  const rawValue = process.env[name] ?? fallback;
+  const value = Number(rawValue);
+
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative number`);
+  }
+
+  return value;
+}
+
 function readString(name, fallback) {
   const value = process.env[name] ?? fallback;
 
@@ -40,7 +51,9 @@ const config = {
   ffmpegAudioBitrate: readString('FFMPEG_AUDIO_BITRATE', '64k'),
   ffmpegAudioChannels: readNumber('FFMPEG_AUDIO_CHANNELS', '1'),
   ffmpegAudioSampleRate: readNumber('FFMPEG_AUDIO_SAMPLE_RATE', '16000'),
-  requestTimeoutMs: readNumber('REQUEST_TIMEOUT_MS', '1800000')
+  requestTimeoutMs: readNumber('REQUEST_TIMEOUT_MS', '1800000'),
+  openaiChunkRetries: readNonNegativeNumber('OPENAI_CHUNK_RETRIES', '3'),
+  openaiRetryBaseMs: readNumber('OPENAI_RETRY_BASE_MS', '1000')
 };
 
 config.maxUploadBytes = config.maxUploadMb * 1024 * 1024;
