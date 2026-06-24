@@ -36,6 +36,8 @@ PORT=3000
 HOST=0.0.0.0
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe
 DEFAULT_LANGUAGE=id
+GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 TEMP_DIR=./temp
 MAX_UPLOAD_MB=500
 MAX_CHUNK_MB=24
@@ -47,6 +49,7 @@ OPENAI_RETRY_BASE_MS=1000
 
 `REQUEST_TIMEOUT_MS=1800000` is 30 minutes. Increase n8n HTTP Request timeout and reverse proxy timeout if large files need more time.
 `OPENAI_CHUNK_RETRIES` retries transient OpenAI/network failures per chunk, such as premature connection close, timeout, rate limit, or upstream 5xx errors.
+`GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` should stay in `.env` and can use escaped `\n` newlines.
 
 ## ffmpeg on Windows
 
@@ -90,6 +93,25 @@ Expected:
 ```
 
 ## Test with curl
+
+### Google Drive file IDs
+
+Share each Drive audio file, or the containing folder, with the service account email from `GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL`.
+
+```bash
+curl -X POST http://localhost:3000/transcribe-drive-files \
+  -H "x-api-key: change-this-internal-secret" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "language": "id",
+    "file_ids": [
+      "google-drive-file-id-1",
+      "google-drive-file-id-2"
+    ]
+  }'
+```
+
+The API accepts 1 to 5 Google Drive file IDs and returns the same response shape as multipart uploads.
 
 ### One file
 
@@ -184,6 +206,45 @@ Timeout: increase if audio files are large
 
 The `file` form field must contain the binary audio file. For multiple files, repeat the `file` field. Files are transcribed and merged in upload order.
 
+## Google Sheets / Apps Script Setup
+
+Use `POST /transcribe-drive-files` when Google Sheets has Drive file IDs instead of local files.
+
+Apps Script example:
+
+```javascript
+function transcribeDriveFiles() {
+  const url = 'http://your-vps-ip:3000/transcribe-drive-files';
+  const payload = {
+    language: 'id',
+    file_ids: [
+      'google-drive-file-id-1',
+      'google-drive-file-id-2'
+    ]
+  };
+
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'x-api-key': 'your-api-key'
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  Logger.log(response.getContentText());
+}
+```
+
+Google Drive setup:
+
+- Enable Google Drive API for the Google Cloud project.
+- Create a service account.
+- Put service account credentials in `.env` as `GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL` and `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`.
+- Share each audio file or containing folder with the service account email.
+- Use downloadable audio files, not Google Docs/Sheets native files.
+
 ## Run with PM2
 
 ```bash
@@ -215,6 +276,7 @@ pm2 restart audio-transcriber-api
 - Keep `MAX_CHUNK_MB` below the OpenAI upload limit. The default is `24`.
 - If production sees repeated OpenAI connection closes, reduce `CHUNK_SECONDS` to `180` so each OpenAI request is shorter.
 - Keep `OPENAI_CHUNK_RETRIES` enabled for transient network failures. The default is `3`.
+- Keep Google service account secrets in `.env`; do not commit them.
 - Make sure reverse proxy, n8n, and Node timeouts are high enough for large audio.
 - Temporary request folders are deleted after success and errors.
 
@@ -234,6 +296,7 @@ Test:
 - Small single-file audio returns `success: true`, `file_count: 1`, and `total_chunk_count: 1`.
 - Multiple audio files return `merged_transcript` and a `files` array in upload order.
 - More than 5 uploaded files returns HTTP `400`.
+- `POST /transcribe-drive-files` accepts 1 to 5 Drive file IDs and returns the same response shape.
 - Large audio is normalized, split into chunks below `MAX_CHUNK_MB`, and returns merged transcript.
 - Missing `x-api-key` returns HTTP `401`.
 - Wrong `x-api-key` returns HTTP `401`.

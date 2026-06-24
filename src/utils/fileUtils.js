@@ -57,6 +57,39 @@ async function saveUploadStream(file, destinationPath, maxUploadBytes) {
   return bytesWritten;
 }
 
+async function saveReadableStreamToDisk(readable, destinationPath, maxBytes) {
+  let bytesWritten = 0;
+  const output = fs.createWriteStream(destinationPath);
+
+  readable.on('data', (chunk) => {
+    bytesWritten += chunk.length;
+
+    if (bytesWritten > maxBytes) {
+      readable.destroy(payloadTooLarge('Downloaded file exceeds configured max upload size'));
+    }
+  });
+
+  try {
+    await pipeline(readable, output);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AppError') {
+      throw error;
+    }
+
+    if (error && error.statusCode === 413) {
+      throw payloadTooLarge('Downloaded file exceeds configured max upload size');
+    }
+
+    throw error;
+  }
+
+  if (bytesWritten === 0) {
+    throw badRequest('Downloaded file is empty');
+  }
+
+  return bytesWritten;
+}
+
 async function getFileSizeBytes(filePath) {
   const stats = await fsp.stat(filePath);
   return stats.size;
@@ -92,6 +125,7 @@ module.exports = {
   createRequestTempFolder,
   getSafeInputPath,
   saveUploadStream,
+  saveReadableStreamToDisk,
   getFileSizeBytes,
   bytesToMb,
   deleteTempFolderSafe,

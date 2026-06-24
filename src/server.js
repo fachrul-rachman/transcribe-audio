@@ -3,6 +3,7 @@ const multipart = require('@fastify/multipart');
 
 const config = require('./config');
 const registerTranscribeAudioRoute = require('./routes/transcribeAudio');
+const registerTranscribeDriveFilesRoute = require('./routes/transcribeDriveFiles');
 const logger = require('./utils/logger');
 
 async function buildServer() {
@@ -25,6 +26,7 @@ async function buildServer() {
   }));
 
   await fastify.register(registerTranscribeAudioRoute);
+  await fastify.register(registerTranscribeDriveFilesRoute);
 
   return fastify;
 }

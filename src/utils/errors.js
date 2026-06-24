@@ -29,6 +29,10 @@ function openAiError(message, statusCode = 502, cause) {
   return new AppError(statusCode, 'OpenAI Error', message, { cause });
 }
 
+function googleDriveError(message, statusCode = 502, cause) {
+  return new AppError(statusCode, 'Google Drive Error', message, { cause });
+}
+
 function toErrorResponse(error) {
   if (error instanceof AppError) {
     return {
@@ -58,5 +62,6 @@ module.exports = {
   payloadTooLarge,
   audioProcessingError,
   openAiError,
+  googleDriveError,
   toErrorResponse
 };

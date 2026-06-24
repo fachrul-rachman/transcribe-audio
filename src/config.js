@@ -35,6 +35,16 @@ function readString(name, fallback) {
   return String(value).trim();
 }
 
+function readOptionalString(name) {
+  const value = process.env[name];
+
+  if (!value || String(value).trim() === '') {
+    return null;
+  }
+
+  return String(value).trim();
+}
+
 const tempDir = path.resolve(process.cwd(), readString('TEMP_DIR', './temp'));
 
 const config = {
@@ -53,7 +63,9 @@ const config = {
   ffmpegAudioSampleRate: readNumber('FFMPEG_AUDIO_SAMPLE_RATE', '16000'),
   requestTimeoutMs: readNumber('REQUEST_TIMEOUT_MS', '1800000'),
   openaiChunkRetries: readNonNegativeNumber('OPENAI_CHUNK_RETRIES', '3'),
-  openaiRetryBaseMs: readNumber('OPENAI_RETRY_BASE_MS', '1000')
+  openaiRetryBaseMs: readNumber('OPENAI_RETRY_BASE_MS', '1000'),
+  googleServiceAccountClientEmail: readOptionalString('GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL'),
+  googleServiceAccountPrivateKey: readOptionalString('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY')
 };
 
 config.maxUploadBytes = config.maxUploadMb * 1024 * 1024;
