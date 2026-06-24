@@ -103,8 +103,14 @@ async function splitAudio(normalizedPath, chunksDir, durationSeconds) {
       '1',
       '-map',
       '0:a',
-      '-c',
-      'copy',
+      '-c:a',
+      'libmp3lame',
+      '-ac',
+      String(config.ffmpegAudioChannels),
+      '-b:a',
+      config.ffmpegAudioBitrate,
+      '-ar',
+      String(config.ffmpegAudioSampleRate),
       path.join(chunksDir, 'chunk-%03d.mp3')
     ],
     'Failed to split audio with ffmpeg'
