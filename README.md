@@ -277,6 +277,7 @@ pm2 restart audio-transcriber-api
 - If production sees repeated OpenAI connection closes, reduce `CHUNK_SECONDS` to `180` so each OpenAI request is shorter.
 - Keep `OPENAI_CHUNK_RETRIES` enabled for transient network failures. The default is `3`.
 - Audio chunks are re-encoded during splitting so each segment is a clean MP3 for OpenAI transcription.
+- Tiny trailing split artifacts under 1 second or 10 KB are skipped instead of being sent to OpenAI.
 - Keep Google service account secrets in `.env`; do not commit them.
 - Make sure reverse proxy, n8n, and Node timeouts are high enough for large audio.
 - Temporary request folders are deleted after success and errors.

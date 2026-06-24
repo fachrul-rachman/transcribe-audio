@@ -9,6 +9,8 @@ const { ensureDirectory, getFileSizeBytes, listChunkFiles } = require('../utils/
 
 const execFileAsync = promisify(execFile);
 const RETRY_DURATIONS_SECONDS = [600, 300, 180, 120, 60];
+const MIN_TRANSCRIBABLE_CHUNK_SECONDS = 1;
+const MIN_TRANSCRIBABLE_CHUNK_BYTES = 10 * 1024;
 
 async function runFfmpeg(args, failureMessage) {
   try {
@@ -122,7 +124,7 @@ async function splitAudio(normalizedPath, chunksDir, durationSeconds) {
     throw audioProcessingError('ffmpeg did not generate audio chunks');
   }
 
-  return chunks;
+  return removeTrailingTinyChunks(chunks);
 }
 
 async function assertGeneratedFile(filePath, message) {
@@ -147,6 +149,40 @@ async function validateChunkSizes(chunkPaths) {
   }
 
   return true;
+}
+
+async function isTinyChunk(chunkPath) {
+  const sizeBytes = await getFileSizeBytes(chunkPath);
+
+  if (sizeBytes < MIN_TRANSCRIBABLE_CHUNK_BYTES) {
+    return true;
+  }
+
+  const durationSeconds = await getAudioDurationSeconds(chunkPath);
+
+  return durationSeconds < MIN_TRANSCRIBABLE_CHUNK_SECONDS;
+}
+
+async function removeTrailingTinyChunks(chunkPaths) {
+  const filteredChunks = [...chunkPaths];
+
+  while (filteredChunks.length > 1) {
+    const lastChunk = filteredChunks[filteredChunks.length - 1];
+    const shouldRemove = await isTinyChunk(lastChunk);
+
+    if (!shouldRemove) {
+      break;
+    }
+
+    await fsp.rm(lastChunk, { force: true });
+    filteredChunks.pop();
+  }
+
+  if (filteredChunks.length === 0) {
+    throw audioProcessingError('ffmpeg generated only empty or too-short audio chunks');
+  }
+
+  return filteredChunks;
 }
 
 function getRetryDurations() {
